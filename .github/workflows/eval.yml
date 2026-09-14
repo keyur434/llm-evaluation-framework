@@ -1,0 +1,37 @@
+name: Eval Gate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      EVAL_THRESHOLD: "0.80"
+      DATABASE_URL: sqlite:///./ci_eval_history.db
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Run golden eval (fail under 80%)
+        run: python -m app.cli run --fail-under 0.80
+        env:
+          # Optional: set repo secrets to evaluate a real endpoint with Claude judge
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EVAL_TARGET_URL: ${{ secrets.EVAL_TARGET_URL }}
+          EVAL_TARGET_MODEL: ${{ secrets.EVAL_TARGET_MODEL }}
+          EVAL_TARGET_API_KEY: ${{ secrets.EVAL_TARGET_API_KEY }}
