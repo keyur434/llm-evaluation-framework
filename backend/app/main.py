@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
@@ -17,24 +19,11 @@ from app.schemas import (
 )
 from app.seed import seed_history
 
-app = FastAPI(title="LLM Evaluation Framework", version="1.0.0")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-@app.on_event("startup")
-def on_startup() -> None:
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
     init_db()
-    from sqlalchemy import select
-
     from app.db import SessionLocal
-    from app.models import EvalRun
 
     db = SessionLocal()
     try:
@@ -45,6 +34,18 @@ def on_startup() -> None:
             seed_history(db)
     finally:
         db.close()
+    yield
+
+
+app = FastAPI(title="LLM Evaluation Framework", version="1.1.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")
@@ -63,6 +64,11 @@ def trigger_eval(db: Session = Depends(get_db)) -> RunTriggerOut:
         n_cases=summary.n_cases,
         candidate=summary.candidate,
         judge=summary.judge,
+        pass_rate=summary.pass_rate,
+        n_failed=summary.n_failed,
+        critical_failed=summary.critical_failed,
+        regression_alert=summary.regression_alert,
+        dataset_version=summary.dataset_version,
     )
 
 
@@ -109,9 +115,11 @@ def get_summary(db: Session = Depends(get_db)) -> SummaryOut:
             passed=None,
             threshold=settings.eval_threshold,
             drift_alert=False,
-            candidate=None,
-            judge=None,
-        )
+        candidate=None,
+        judge=None,
+        pass_rate=None,
+        dataset_version="",
+    )
     return SummaryOut(
         latest_run_id=latest.id,
         mean_score=latest.mean_score,
@@ -120,4 +128,12 @@ def get_summary(db: Session = Depends(get_db)) -> SummaryOut:
         drift_alert=latest.drift_alert,
         candidate=latest.candidate,
         judge=latest.judge,
+        pass_rate=latest.pass_rate,
+        n_failed=latest.n_failed,
+        critical_failed=latest.critical_failed or 0,
+        regression_delta=latest.regression_delta,
+        regression_alert=bool(latest.regression_alert),
+        dataset_version=latest.dataset_version or "",
+        p95_latency_ms=latest.p95_latency_ms,
+        score_stderr=latest.score_stderr,
     )

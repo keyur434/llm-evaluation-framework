@@ -1,72 +1,61 @@
 # LLM Evaluation Framework
 
-Standalone eval infrastructure: golden dataset → any LLM endpoint → Claude-as-judge → SQLite history → drift alerts → CI gate → React dashboard.
+A standalone evaluation service. It runs a versioned golden dataset against an LLM endpoint, scores each case with a deterministic check or an LLM judge, stores the history, and fails CI when quality drops.
 
-## Features
-
-- 50 prompt/expected pairs (`backend/data/golden.json`)
-- Mock candidate + OpenAI-compatible HTTP adapter
-- Claude judge (`ANTHROPIC_API_KEY`) with MockJudge fallback for free local/CI runs
-- SQLite score history with timestamps
-- Drift alert when 7-day mean drops ≥10% vs prior 7 days
-- GitHub Actions fails if mean score &lt; 80%
-- React dashboard: score history, category table, drift banner
+The default path uses a mock candidate and a mock judge, so local runs and GitHub Actions cost nothing. Point the same runner at an OpenAI-compatible endpoint and Claude when you want a real model.
 
 ## Quick start
 
 ```bash
-# Backend
 cd backend
 python -m venv .venv
 # Windows: .venv\Scripts\activate
-source .venv/bin/activate
+# macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+copy ..\.env.example ..\.env   # Windows
+# cp ../.env.example ../.env   # macOS/Linux
 
-# CLI eval
 python -m app.cli run --fail-under 0.80
+uvicorn app.main:app --reload --port 8000
+```
 
-# Frontend (new terminal)
+Dashboard, in a second terminal:
+
+```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173 — API at http://localhost:8000/docs.
+- Dashboard: http://localhost:5173
+- API docs: http://localhost:8000/docs
 
-Copy `.env.example` to `.env` and set keys as needed.
+## Documentation
 
-## Point at a real model
+| Guide | What it covers |
+| --- | --- |
+| [Architecture](docs/architecture.md) | Components, data flow, storage |
+| [Golden dataset](docs/dataset.md) | Case schema, assertions, versioning |
+| [Scoring and gates](docs/scoring.md) | Judge rubric, pass rules, drift, regression |
+| [API](docs/api.md) | HTTP endpoints and the CLI |
+| [CI](docs/ci.md) | GitHub Actions gate and the JSON report |
+| [Configuration](docs/configuration.md) | Environment variables |
 
-```env
-EVAL_TARGET_URL=https://api.openai.com
-EVAL_TARGET_MODEL=gpt-4o-mini
-EVAL_TARGET_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-EVAL_THRESHOLD=0.80
-```
+## What a run checks
 
-Without these, MockCandidate + MockJudge run (zero cost, deterministic).
+A run passes only when all three are true:
 
-## CI
-
-`.github/workflows/eval.yml` runs pytest then `python -m app.cli run --fail-under 0.80` on every push/PR. Optional secrets: `ANTHROPIC_API_KEY`, `EVAL_TARGET_URL`, `EVAL_TARGET_MODEL`, `EVAL_TARGET_API_KEY`.
-
-## API
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/eval/run` | Trigger eval |
-| GET | `/api/eval/runs` | History |
-| GET | `/api/eval/runs/{id}` | Per-case scores |
-| GET | `/api/eval/drift` | 7-day drift status |
-| GET | `/api/eval/summary` | Latest mean / pass / threshold |
+1. Mean score is at least `EVAL_THRESHOLD` (default 0.80).
+2. Every critical case passes. Refusal cases are critical.
+3. The mean has not dropped by `EVAL_REGRESSION` or more (default 0.05) versus the previous run on the same dataset version.
 
 ## Layout
 
 ```
-backend/app/          FastAPI + eval engine
+backend/app/eval/     runner, assertions, judge, drift, report
 backend/data/         golden.json
-frontend/             Vite + React + Recharts
+backend/tests/        pytest suite (no live API calls)
+frontend/             Vite + React dashboard
 .github/workflows/    eval gate
+docs/                 this documentation
 ```

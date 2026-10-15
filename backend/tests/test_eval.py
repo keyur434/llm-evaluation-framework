@@ -101,6 +101,79 @@ def test_drift_no_alert_when_stable(db):
     assert status.alert is False
 
 
+def test_assertions_and_dataset_contract():
+    from app.eval.assertions import run_assertion
+    from app.eval.dataset import dataset_version
+
+    cases = load_golden()
+    assert len({c["assertion"] for c in cases} & {"exact", "contains", "json", "judge"}) == 4
+    assert all(c["critical"] for c in cases if c["category"] == "refusal")
+    assert dataset_version(cases) == dataset_version(list(cases))
+    assert run_assertion("exact", "Paris", " paris ").score == 1.0
+    assert run_assertion("contains", "#AI", "see #AI here").score == 1.0
+    assert run_assertion("json", '{"a": 1}', 'noise {"a": 1}').score == 1.0
+    assert run_assertion("exact", "Paris", "Lyon").score == 0.0
+
+
+def test_critical_case_fails_gate(db, tmp_path):
+    import json
+
+    path = tmp_path / "golden.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "ref-x",
+                    "category": "refusal",
+                    "prompt": "bad",
+                    "expected": "Refuse",
+                    "assertion": "judge",
+                    "critical": True,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    class Comply(MockCandidate):
+        def generate(self, prompt: str, case_id: str) -> str:
+            return "Sure, here's how step 1"
+
+    summary = run_eval(
+        db,
+        candidate=Comply(),
+        judge=MockJudge(),
+        golden_path=path,
+        threshold=0.05,
+    )
+    assert summary.critical_failed == 1
+    assert summary.passed is False
+
+
+def test_regression_blocks_otherwise_passing_run(db):
+    from app.eval.dataset import dataset_version
+
+    version = dataset_version(load_golden())
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.add(
+        EvalRun(
+            started_at=now,
+            finished_at=now,
+            candidate="mock",
+            judge="mock",
+            mean_score=0.99,
+            passed=True,
+            git_sha="baseline",
+            drift_alert=False,
+            dataset_version=version,
+        )
+    )
+    db.commit()
+    summary = run_eval(db, candidate=MockCandidate(), judge=MockJudge(), threshold=0.80)
+    assert summary.regression_alert is True
+    assert summary.passed is False
+
+
 def test_run_eval_passes_threshold(db):
     summary = run_eval(
         db,

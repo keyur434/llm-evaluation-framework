@@ -28,10 +28,16 @@ jobs:
         run: pytest -q
 
       - name: Run golden eval (fail under 80%)
-        run: python -m app.cli run --fail-under 0.80
+        run: python -m app.cli run --fail-under 0.80 --report reports/eval-report.json
         env:
-          # Optional: set repo secrets to evaluate a real endpoint with Claude judge
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           EVAL_TARGET_URL: ${{ secrets.EVAL_TARGET_URL }}
           EVAL_TARGET_MODEL: ${{ secrets.EVAL_TARGET_MODEL }}
           EVAL_TARGET_API_KEY: ${{ secrets.EVAL_TARGET_API_KEY }}
+
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: backend/reports/eval-report.json

@@ -115,6 +115,11 @@ export default function App() {
       {drift ? (
         <div className={`banner ${drift.alert ? "alert" : "ok"}`}>{drift.message}</div>
       ) : null}
+      {summary?.regression_alert ? (
+        <div className="banner alert">
+          Regression vs last pinned dataset run: {fmtPct(summary.regression_delta)} drop.
+        </div>
+      ) : null}
 
       <div className="row">
         <button onClick={onRun} disabled={running}>
@@ -124,7 +129,8 @@ export default function App() {
           Refresh
         </button>
         <span className="muted">
-          candidate={summary?.candidate ?? "—"} · judge={summary?.judge ?? "—"}
+          candidate={summary?.candidate ?? "—"} · judge={summary?.judge ?? "—"} · dataset=
+          {summary?.dataset_version || "—"}
         </span>
       </div>
 
@@ -144,8 +150,20 @@ export default function App() {
           <div className="value">{fmtPct(drift?.current_7d_mean)}</div>
         </div>
         <div className="card">
-          <div className="label">Prior 7d</div>
-          <div className="value">{fmtPct(drift?.previous_7d_mean)}</div>
+          <div className="label">Pass rate</div>
+          <div className="value">{fmtPct(summary?.pass_rate)}</div>
+        </div>
+        <div className="card">
+          <div className="label">Failed cases</div>
+          <div className={`value ${(summary?.n_failed ?? 0) > 0 ? "fail" : "pass"}`}>
+            {summary?.n_failed ?? "—"}
+          </div>
+        </div>
+        <div className="card">
+          <div className="label">p95 latency</div>
+          <div className="value">
+            {summary?.p95_latency_ms == null ? "—" : `${Math.round(summary.p95_latency_ms)}ms`}
+          </div>
         </div>
       </div>
 
@@ -205,6 +223,38 @@ export default function App() {
                   <td className={c.mean >= threshold ? "pass" : "fail"}>{fmtPct(c.mean)}</td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="card" style={{ marginTop: "1rem" }}>
+        <div className="label" style={{ marginBottom: "0.75rem" }}>
+          Failed cases
+        </div>
+        {(detail?.results || []).filter((r) => r.passed === false).length === 0 ? (
+          <p className="muted">No failed cases on the latest run.</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Case</th>
+                <th>Assertion</th>
+                <th>Score</th>
+                <th>Why</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(detail.results || [])
+                .filter((r) => r.passed === false)
+                .map((r) => (
+                  <tr key={r.id}>
+                    <td>{r.case_id}</td>
+                    <td>{r.assertion || r.category}</td>
+                    <td className="fail">{fmtPct(r.score)}</td>
+                    <td>{r.rationale}</td>
+                  </tr>
+                ))}
             </tbody>
           </table>
         )}

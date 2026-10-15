@@ -13,6 +13,11 @@ class EvalResultOut(BaseModel):
     score: float
     rationale: str
     actual_output: str
+    assertion: str = ""
+    passed: bool = False
+    latency_ms: Optional[float] = None
+    error: str = ""
+    rubric_json: str = ""
 
 
 class EvalRunOut(BaseModel):
@@ -27,6 +32,15 @@ class EvalRunOut(BaseModel):
     passed: Optional[bool]
     git_sha: Optional[str]
     drift_alert: bool
+    dataset_version: str = ""
+    pass_rate: Optional[float] = None
+    n_cases: Optional[int] = None
+    n_failed: Optional[int] = None
+    critical_failed: int = 0
+    regression_delta: Optional[float] = None
+    regression_alert: bool = False
+    p95_latency_ms: Optional[float] = None
+    score_stderr: Optional[float] = None
 
 
 class EvalRunDetailOut(EvalRunOut):
@@ -49,6 +63,14 @@ class SummaryOut(BaseModel):
     drift_alert: bool
     candidate: Optional[str]
     judge: Optional[str]
+    pass_rate: Optional[float] = None
+    n_failed: Optional[int] = None
+    critical_failed: int = 0
+    regression_delta: Optional[float] = None
+    regression_alert: bool = False
+    dataset_version: str = ""
+    p95_latency_ms: Optional[float] = None
+    score_stderr: Optional[float] = None
 
 
 class RunTriggerOut(BaseModel):
@@ -59,3 +81,8 @@ class RunTriggerOut(BaseModel):
     n_cases: int
     candidate: str
     judge: str
+    pass_rate: float
+    n_failed: int
+    critical_failed: int
+    regression_alert: bool
+    dataset_version: str

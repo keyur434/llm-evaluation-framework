@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     eval_target_model: str = "gpt-4o-mini"
     eval_target_api_key: str = ""
     eval_threshold: float = 0.80
+    eval_regression: float = 0.05
+    eval_concurrency: int = 8
     database_url: str = f"sqlite:///{DEFAULT_DB.as_posix()}"
     judge_model: str = "claude-sonnet-4-5"
 
